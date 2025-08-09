@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Мини-приложение Таксометр</title>
+  <style>
+    body, html { height: 100%; margin: 0; font-family: Arial, sans-serif; }
+    #map { height: 300px; width: 100%; margin-bottom: 10px; }
+    #controls { padding: 10px; max-width: 500px; margin: auto; }
+    input, button { width: 100%; padding: 8px; margin: 6px 0; box-sizing: border-box; }
+    button { background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }
+    #result { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <input id="from" placeholder="Откуда" type="text" autocomplete="off" />
+    <input id="to" placeholder="Куда" type="text" autocomplete="off" />
+    <button id="calcBtn">Рассчитать и Заказать</button>
+    <div id="result"></div>
+  </div>
+  <div id="map"></div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    let map, directionsService, directionsRenderer;
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 55.7558, lng: 37.6173 }, // Москва
+        zoom: 10,
+      });
+
+      directionsService = new google.maps.DirectionsService();
+      directionsRenderer = new google.maps.DirectionsRenderer();
+      directionsRenderer.setMap(map);
+
+      const fromInput = document.getElementById("from");
+      const toInput = document.getElementById("to");
+
+      const autocompleteFrom = new google.maps.places.Autocomplete(fromInput);
+      autocompleteFrom.setFields(["place_id", "geometry", "name"]);
+
+      const autocompleteTo = new google.maps.places.Autocomplete(toInput);
+      autocompleteTo.setFields(["place_id", "geometry", "name"]);
+
+      document.getElementById("calcBtn").onclick = () => {
+        const from = fromInput.value.trim();
+        const to = toInput.value.trim();
+
+        if (!from || !to) {
+          alert("Пожалуйста, заполните оба поля");
+          return;
+        }
+
+        directionsService.route(
+          {
+            origin: from,
+            destination: to,
+            travelMode: google.maps.TravelMode.DRIVING,
+          },
+          (response, status) => {
+            if (status === "OK") {
+              directionsRenderer.setDirections(response);
+              const route = response.routes[0];
+              let distanceMeters = 0;
+              route.legs.forEach(leg => {
+                distanceMeters += leg.distance.value;
+              });
+              const distanceKm = distanceMeters / 1000;
+              const price = Math.round(distanceKm * 50); // 50 ₽ за км
+
+              document.getElementById("result").innerHTML =
+                `Расстояние: ${distanceKm.toFixed(2)} км<br>` +
+                `Стоимость: ${price} ₽`;
+
+              // Отправляем данные в Telegram-бот
+              tg.sendData(JSON.stringify({
+                from: from,
+                to: to,
+                distance: distanceKm.toFixed(2),
+                price: price
+              }));
+            } else {
+              alert("Не удалось построить маршрут: " + status);
+            }
+          }
+        );
+      };
+    }
+  </script>
+
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=ВАШ_GOOGLE_API_KEY&libraries=places&callback=initMap"
+    async defer></script>
+</body>
+</html>
